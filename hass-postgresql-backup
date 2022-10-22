@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# Backup the Home Assistant database from Postgresql
+#
+# Copyright 2022, Joe Block <jpb@unixorn.net>
+
+set -o pipefail
+if [[ -n "$DEBUG" ]]; then
+  set -x
+fi
+
+function debug() {
+  if [[ -n "$DEBUG" ]]; then
+    echo "$@"
+  fi
+}
+
+function echo-stderr() {
+  echo "$@" 1>&2
+}
+
+function fail() {
+  printf '%s\n' "$1" >&2  ## Send message to stderr. Exclude >&2 if you don't want it that way.
+  exit "${2-1}"  ## Return a code specified by $2 or 1 by default.
+}
+
+function has() {
+  # Check if a command is in $PATH
+  which "$@" > /dev/null 2>&1
+}
+
+if ! has docker; then
+  fail "Can't find docker in your PATH - this depends on docker"
+fi
+
+function determine-compressor() {
+  if [[ -z "$COMPRESSOR" ]]; then
+    if has gzip; then
+      COMPRESSOR=gzip
+      COMPRESSION_ARGS="-9v"
+      EXTENSION='gz'
+      debug "Found gzip"
+    fi
+    if has pigz; then
+      COMPRESSOR=pigz
+      COMPRESSION_ARGS="-9v --time"
+      EXTENSION='gz'
+      debug "Found pigz"
+    fi
+    if has bzip2; then
+      COMPRESSOR=bzip2
+      COMPRESSION_ARGS="-9v"
+      EXTENSION='bz2'
+      debug "Found bzip2"
+    fi
+    if has pbzip2; then
+      COMPRESSOR=pbzip2
+      COMPRESSION_ARGS="-9v"
+      EXTENSION='bz2'
+      debug "Found pbzip2"
+    fi
+  elss
+    debug "Per environment, using ${COMPRESSOR} to compress"
+  fi
+  debug "Will compress with ${COMPRESSOR} ${COMPRESSION_ARGS}..."
+}
+
+function get-settings() {
+  POSTGRESQL_IMAGE=${POSTGRESQL_IMAGE:-'postgres:14.5'}
+  PG_SERVER=${PG_SERVER:-postgres.example.com}
+  PG_USERNAME=${PG_USERNAME:-homeassistant}
+  PG_PASSWORD=${PG_PASSWORD:-SpeakFriendAndEnter}
+  HASS_DB=${HASS_DB:-homeassistant_db}
+  DUMP_D=${DUMP_D:-$(pwd)}
+}
+
+get-settings
+determine-compressor
+
+STAMP=$(date +%Y-%m-%d-%H%M.%S)
+
+mkdir -p "${DUMP_D}"
+if [[ -z "$COMPRESSOR" ]]; then
+  echo-stderr "Couldn't find gzip, bzip2, pigz or pbzip2 to compress with, making an uncompressed SQL file"
+  docker run --rm "$POSTGRESQL_IMAGE" \
+    pg_dump --host="$PG_SERVER" \
+    --dbname="postgresql://${PG_USERNAME}:${PG_PASSWORD}@${PG_SERVER}/${HASS_DB}" \
+    > "${DUMP_D}/ha-database-${STAMP}.sql"
+else
+  echo-stderr "Compressing SQL with ${COMPRESSOR}..."
+  docker run --rm "$POSTGRESQL_IMAGE" \
+    pg_dump --host="$PG_SERVER" \
+    --dbname="postgresql://${PG_USERNAME}:${PG_PASSWORD}@${PG_SERVER}/${HASS_DB}" \
+    | ${COMPRESSOR} ${COMPRESSION_ARGS} > "${DUMP_D}/ha-database-${STAMP}.sql.${EXTENSION}"
+fi
+exit $?
