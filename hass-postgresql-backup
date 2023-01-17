@@ -59,7 +59,7 @@ function determine-compressor() {
       EXTENSION='bz2'
       debug "Found pbzip2"
     fi
-  elss
+  else
     debug "Per environment, using ${COMPRESSOR} to compress"
   fi
   debug "Will compress with ${COMPRESSOR} ${COMPRESSION_ARGS}..."
