@@ -66,7 +66,7 @@ function determine-compressor() {
 }
 
 function get-settings() {
-  POSTGRESQL_IMAGE=${POSTGRESQL_IMAGE:-'postgres:14.5'}
+  POSTGRESQL_IMAGE=${POSTGRESQL_IMAGE:-'postgres:16-bookworm'}
   PG_SERVER=${PG_SERVER:-postgres.example.com}
   PG_USERNAME=${PG_USERNAME:-homeassistant}
   PG_PASSWORD=${PG_PASSWORD:-SpeakFriendAndEnter}
